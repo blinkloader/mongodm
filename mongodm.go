@@ -76,10 +76,12 @@ Now that you got some models it is important to create a connection to the datab
 package mongodm
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"path"
 	"reflect"
 	"runtime"
@@ -296,14 +298,24 @@ func (self *Connection) Open() (err error) {
 
 	info := &mgo.DialInfo{
 		Addrs:    self.Config.DatabaseHosts,
-		Timeout:  3 * time.Second,
+		Timeout:  5 * time.Second,
 		Database: self.Config.DatabaseName,
 		Username: self.Config.DatabaseUser,
 		Password: self.Config.DatabasePassword,
 	}
 
-	session, err := mgo.DialWithInfo(info)
+	var session *mgo.Session
+	if len(info.Addrs) > 0 && strings.Contains(info.Addrs[0], ",") {
+		tlsConfig := &tls.Config{}
+		tlsConfig.InsecureSkipVerify = true
 
+		info, err = mgo.ParseURL(info.Addrs[0])
+		info.DialServer = func(addr *mgo.ServerAddr) (net.Conn, error) {
+			conn, err := tls.Dial("tcp", addr.String(), tlsConfig)
+			return conn, err
+		}
+	}
+	session, err = mgo.DialWithInfo(info)
 	if err != nil {
 		return err
 	}
